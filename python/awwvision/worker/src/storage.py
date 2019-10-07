@@ -1,4 +1,4 @@
-# Copyright 2015 Google Inc.
+# Copyright 2019 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,28 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 
-from redis import StrictRedis
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
 
 
 class Storage(object):
-    def __init__(self, host=None, port=None, *args, **kwargs):
-        if host is None:
-            host = os.environ.get('REDIS_HOST', 'localhost')
-        if port is None:
-            port = os.environ.get('REDIS_PORT', '6379')
-
-        self.redis = StrictRedis(host, port, *args, **kwargs)
-
+    def __init__(self, project_id, *args, **kwargs):
+        cred = credentials.ApplicationDefault()
+        firebase_admin.initialize_app(cred, {
+        'projectId': project_id,
+        })
+        self.db = firestore.client()
+        
+    
     def add_labels(self, labels):
-        self.redis.sadd('labels', *labels)
-
+        labels = self.db.collections(u'labels')
+        labels.document(*labels).create({})
+    
     def add_image(self, image_url, labels):
-        p = self.redis.pipeline()
-
+        labels_collection = self.db.collections(u'labels')
         for label in labels:
-            p.sadd(label, image_url)
-            p.setnx('repr_img:{}'.format(label), image_url)
-
-        p.execute()
+            label_doc= labels_collection.document(label)
+            label_doc.set({'repr_image': image_url, 'images': self.db.ArrayUnion([label])}, merge=True)
+            
